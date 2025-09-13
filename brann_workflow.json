@@ -1,0 +1,71 @@
+{
+  "name": "BRANN Workflow",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Webhook IN (Evolution)",
+      "type": "n8n-nodes-base.webhook",
+      "parameters": {
+        "path": "whatsapp/incoming",
+        "httpMethod": "POST"
+      }
+    },
+    {
+      "id": "2",
+      "name": "Parser / Normalizador",
+      "type": "n8n-nodes-base.function",
+      "parameters": {
+        "functionCode": "return [{json: { from: $json.body.from, text: $json.body.text, type: $json.body.type, meta: $json.body.meta }}];"
+      }
+    },
+    {
+      "id": "3",
+      "name": "Roteador de Intenção",
+      "type": "n8n-nodes-base.switch",
+      "parameters": {
+        "property": "={{$json[\"text\"]}}",
+        "rules": [
+          { "operation": "contains", "value": "plano" },
+          { "operation": "contains", "value": "consultoria" },
+          { "operation": "contains", "value": "humano" }
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "name": "Core LLM (BRANN)",
+      "type": "n8n-nodes-base.openAi",
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "mode": "chat",
+        "systemMessage": "Use persona BRANN do arquivo core_brann.md. Seja objetivo, simpático, sempre encaminhando para planos, consultoria ou humano."
+      }
+    },
+    {
+      "id": "5",
+      "name": "Supabase Log",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "https://SUPABASE_URL/rest/v1/conversations",
+        "method": "POST",
+        "authentication": "headerAuth"
+      }
+    },
+    {
+      "id": "6",
+      "name": "Evolution Send",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "url": "={{$json[\"from\"]}}",
+        "method": "POST",
+        "bodyParametersJson": "={ \"text\": $json.reply_text, \"buttons\": $json.buttons }"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook IN (Evolution)": { "main": [[{ "node": "Parser / Normalizador", "type": "main", "index": 0 }]] },
+    "Parser / Normalizador": { "main": [[{ "node": "Roteador de Intenção", "type": "main", "index": 0 }]] },
+    "Roteador de Intenção": { "main": [[{ "node": "Core LLM (BRANN)", "type": "main", "index": 0 }]] },
+    "Core LLM (BRANN)": { "main": [[{ "node": "Supabase Log", "type": "main", "index": 0 }, { "node": "Evolution Send", "type": "main", "index": 0 }]] }
+  }
+}
